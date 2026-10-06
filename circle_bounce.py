@@ -8,6 +8,8 @@ HEIGHT = 800
 CIRCLE_RADIUS = 300
 BALL_RADIUS = 10
 BALL_SPEED = 240.0
+GRAVITY = 500.0
+IMPACT_LINE_LENGTH = 28.0
 FRAME_MS = 16
 
 
@@ -45,8 +47,7 @@ class CircleBounce:
             outline="white",
             width=2,
         )
-        self.trails: list[tuple[int, list[float]]] = []
-        self.start_trail()
+        self.impact_line: int | None = None
         self.ball = self.canvas.create_oval(
             self.x - BALL_RADIUS,
             self.y - BALL_RADIUS,
@@ -58,49 +59,55 @@ class CircleBounce:
 
         self.previous_time = time.perf_counter()
         self.root.bind("<Escape>", lambda _event: self.root.destroy())
-        self.root.bind("c", self.clear_trails)
         self.animate()
 
-    def start_trail(self) -> None:
-        line_id = self.canvas.create_line(
+    def show_impact_line(self) -> None:
+        if self.impact_line is not None:
+            self.canvas.delete(self.impact_line)
+        self.impact_line = self.canvas.create_line(
             self.x,
             self.y,
             self.x,
             self.y,
             fill="white",
-            width=1,
+            width=2,
         )
-        self.trails.append((line_id, [self.x, self.y]))
-
-    def clear_trails(self, _event: tk.Event | None = None) -> None:
-        for line_id, _points in self.trails:
-            self.canvas.delete(line_id)
-        self.trails.clear()
-        self.start_trail()
+        self.canvas.tag_lower(self.impact_line, self.ball)
 
     def animate(self) -> None:
         now = time.perf_counter()
         dt = min(now - self.previous_time, 0.05)
         self.previous_time = now
 
+        self.vy += GRAVITY * dt
         self.x += self.vx * dt
         self.y += self.vy * dt
         dx = self.x - self.center_x
         dy = self.y - self.center_y
         distance = math.hypot(dx, dy)
 
-        if distance >= self.boundary_radius:
+        if distance >= self.boundary_radius and distance > 0:
             nx = dx / distance
             ny = dy / distance
             self.x = self.center_x + nx * self.boundary_radius
             self.y = self.center_y + ny * self.boundary_radius
 
-            self.vx, self.vy = reflect_velocity(self.vx, self.vy, nx, ny)
-            self.start_trail()
+            if self.vx * nx + self.vy * ny > 0:
+                self.vx, self.vy = reflect_velocity(self.vx, self.vy, nx, ny)
+                self.show_impact_line()
 
-        line_id, points = self.trails[-1]
-        points.extend((self.x, self.y))
-        self.canvas.coords(line_id, *points)
+        if self.impact_line is not None:
+            speed = math.hypot(self.vx, self.vy)
+            if speed > 0:
+                direction_x = self.vx / speed
+                direction_y = self.vy / speed
+                self.canvas.coords(
+                    self.impact_line,
+                    self.x - direction_x * BALL_RADIUS,
+                    self.y - direction_y * BALL_RADIUS,
+                    self.x - direction_x * (BALL_RADIUS + IMPACT_LINE_LENGTH),
+                    self.y - direction_y * (BALL_RADIUS + IMPACT_LINE_LENGTH),
+                )
         self.canvas.coords(
             self.ball,
             self.x - BALL_RADIUS,
@@ -119,3 +126,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+# this is nice
