@@ -7,9 +7,11 @@ WIDTH = 800
 HEIGHT = 800
 CIRCLE_RADIUS = 300
 BALL_RADIUS = 10
+BALL_GROWTH = 2
+MAX_BALL_RADIUS = CIRCLE_RADIUS - 15
 BALL_SPEED = 240.0
+BOUNCE_SPEED_MULTIPLIER = 1.00000000000000000000000001
 GRAVITY = 500.0
-IMPACT_LINE_LENGTH = 28.0
 FRAME_MS = 16
 
 
@@ -33,7 +35,8 @@ class CircleBounce:
 
         self.center_x = WIDTH / 2
         self.center_y = HEIGHT / 2
-        self.boundary_radius = CIRCLE_RADIUS - BALL_RADIUS
+        self.ball_radius = BALL_RADIUS
+        self.boundary_radius = CIRCLE_RADIUS - self.ball_radius
         self.x = self.center_x
         self.y = self.center_y
         self.vx = BALL_SPEED * math.cos(math.radians(-37))
@@ -47,7 +50,7 @@ class CircleBounce:
             outline="white",
             width=2,
         )
-        self.impact_line: int | None = None
+        self.impact_lines: list[tuple[int, float, float]] = []
         self.ball = self.canvas.create_oval(
             self.x - BALL_RADIUS,
             self.y - BALL_RADIUS,
@@ -61,18 +64,17 @@ class CircleBounce:
         self.root.bind("<Escape>", lambda _event: self.root.destroy())
         self.animate()
 
-    def show_impact_line(self) -> None:
-        if self.impact_line is not None:
-            self.canvas.delete(self.impact_line)
-        self.impact_line = self.canvas.create_line(
-            self.x,
-            self.y,
+    def show_impact_line(self, wall_x: float, wall_y: float) -> None:
+        line = self.canvas.create_line(
+            wall_x,
+            wall_y,
             self.x,
             self.y,
             fill="white",
             width=2,
         )
-        self.canvas.tag_lower(self.impact_line, self.ball)
+        self.impact_lines.append((line, wall_x, wall_y))
+        self.canvas.tag_lower(line, self.ball)
 
     def animate(self) -> None:
         now = time.perf_counter()
@@ -89,31 +91,31 @@ class CircleBounce:
         if distance >= self.boundary_radius and distance > 0:
             nx = dx / distance
             ny = dy / distance
-            self.x = self.center_x + nx * self.boundary_radius
-            self.y = self.center_y + ny * self.boundary_radius
 
             if self.vx * nx + self.vy * ny > 0:
                 self.vx, self.vy = reflect_velocity(self.vx, self.vy, nx, ny)
-                self.show_impact_line()
-
-        if self.impact_line is not None:
-            speed = math.hypot(self.vx, self.vy)
-            if speed > 0:
-                direction_x = self.vx / speed
-                direction_y = self.vy / speed
-                self.canvas.coords(
-                    self.impact_line,
-                    self.x - direction_x * BALL_RADIUS,
-                    self.y - direction_y * BALL_RADIUS,
-                    self.x - direction_x * (BALL_RADIUS + IMPACT_LINE_LENGTH),
-                    self.y - direction_y * (BALL_RADIUS + IMPACT_LINE_LENGTH),
+                self.vx *= BOUNCE_SPEED_MULTIPLIER
+                self.vy *= BOUNCE_SPEED_MULTIPLIER
+                self.ball_radius = min(
+                    self.ball_radius + BALL_GROWTH,
+                    MAX_BALL_RADIUS,
                 )
+                self.boundary_radius = CIRCLE_RADIUS - self.ball_radius
+                wall_x = self.center_x + nx * CIRCLE_RADIUS
+                wall_y = self.center_y + ny * CIRCLE_RADIUS
+                self.show_impact_line(wall_x, wall_y)
+
+            self.x = self.center_x + nx * self.boundary_radius
+            self.y = self.center_y + ny * self.boundary_radius
+
+        for line, anchor_x, anchor_y in self.impact_lines:
+            self.canvas.coords(line, anchor_x, anchor_y, self.x, self.y)
         self.canvas.coords(
             self.ball,
-            self.x - BALL_RADIUS,
-            self.y - BALL_RADIUS,
-            self.x + BALL_RADIUS,
-            self.y + BALL_RADIUS,
+            self.x - self.ball_radius,
+            self.y - self.ball_radius,
+            self.x + self.ball_radius,
+            self.y + self.ball_radius,
         )
         self.root.after(FRAME_MS, self.animate)
 
